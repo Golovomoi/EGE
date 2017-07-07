@@ -105,6 +105,27 @@ sub add {
 	$self;
 }
 
+sub quotient_div {
+	my ($self, $eflags, $reg, $val, $bits) = @_;
+	my $dividend = $self->get_value($reg);
+	$dividend += $bits*2**16 if defined $bits;
+	my $divisor = $val;
+	my $newval = int($dividend / $divisor);
+	$self->mov($eflags, '', $newval);
+	$self;
+}
+
+sub remainder_div {
+	my ($self, $eflags, $reg, $val, $bits) = @_;
+	my $dividend = $self->get_value($reg);
+	$dividend = $dividend*2**16 +$bits if defined $bits;
+	my $divisor = $val;
+	my $newval = $dividend % $divisor;
+	$self->mov($eflags, '', $newval);
+	$self;
+}
+
+
 sub adc {
 	my ($self, $eflags, $reg, $val) = @_;
 	$self->add($eflags, $reg, $val, 1);

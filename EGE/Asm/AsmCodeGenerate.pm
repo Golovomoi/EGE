@@ -99,7 +99,7 @@ sub get_regs {
 
 sub single_arg {
 	my ($self, $cmd) = @_;
-	{ not => 1, neg => 1 }->{$cmd};
+	{ not => 1, neg => 1, div => 1 }->{$cmd};
 }
 
 sub use_cf {
@@ -125,16 +125,18 @@ sub get_hex_arg_bscan {
 }
 
 sub get_hex_args_add {
-	my ($arg1, $arg2) = (0, 0);
-	for (1..7) {
-		my $sum = rnd->in_range(0, 15);
-		my $n = rnd->in_range(ceil($sum/2), $sum);
-		$arg1 = $arg1*16 + $n;
-		$arg2 = $arg2*16 + $sum - $n;
-	}
-	$_ += rnd->in_range(0, 15) * 16**7 for ($arg1, $arg2);
-	($arg1, $arg2);
+    my ($arg1, $arg2) = (0, 0);
+    for (1..7) {
+        my $sum = rnd->in_range(0, 15);
+        my $n = rnd->in_range(ceil($sum/2), $sum);
+        $arg1 = $arg1*16 + $n;
+        $arg2 = $arg2*16 + $sum - $n;
+    }
+    $_ += rnd->in_range(0, 15) * 16**7 for ($arg1, $arg2);
+    ($arg1, $arg2);
 }
+
+
 
 sub get_hex_args_logic {
 	my @arr = (0, 0);
@@ -182,27 +184,53 @@ sub generate_bscan_code {
     ($reg1, $reg2, $format_variants, $format_code);
 }
 
+sub generate_div_code {
+    my ($self, $type) =@_;
+    my $size = rnd->pick(8,  16);
+    my ($format) = {8 => '%s', 16=> ('%04Xh'), 32 => ('%08Xh')}->{$size};
+    $self->{code} = [];
+    my $reg;
+    if ($size == 8){
+        $reg = rnd->pick('c', 'b', 'd') . rnd->pick('h', 'l');
+        $self->add_commands(
+            $self->random_mov('ax'),
+            $self->random_mov($reg),
+            ['div', $reg ], );  
+            $reg = rnd->pick('al', 'ah');  
+        }
+    else {
+        $reg = rnd->pick('bx', 'cx');
+        $self->add_commands(
+            $self->random_mov('dx'),
+            $self->random_mov('ax'),
+            $self->random_mov("$reg"),
+            ['div', $reg ]);    
+        $reg = rnd->pick('ax', 'dx');
+        }
+    ($reg, $format, $size);
+}
+
 sub generate_simple_code {
-	my ($self, $type) = @_;
-	my ($format, $n) = (rnd->pick(0,1)) ? ('%s', 8) : ('%08Xh', 32);
-	my $reg = $self->get_reg($n);
-	$self->{code} = [];
-	if ($n == 8) {
+    my ($self, $type) = @_;
+    my ($format, $n) = (rnd->pick(0,1)) ? ('%s', 8) : ('%08Xh', 32);
+    my $reg = $self->get_reg($n);
+    $self->{code} = [];
+    if ($n == 8) {
         $self->add_commands(
             $self->random_mov($reg),
             $self->random_command($type, $reg));
-		$self->{code}->[0]->[2] = rnd->in_range(1, 15) * 16 + rnd->in_range(1, 15) if ($type eq 'shift');
-	}
-	else {
-		my ($arg1, $arg2) = $self->get_hex_args($type);
+        $self->{code}->[0]->[2] = rnd->in_range(1, 15) * 16 + rnd->in_range(1, 15) if ($type eq 'shift');
+    }
+    else {
+        my ($arg1, $arg2) = $self->get_hex_args($type);
         $self->add_commands(
             [ 'mov', $reg, $arg1 ],
             $self->random_command($type, $reg, $arg2));
-	}
-	($reg, $format, $n, cgen->{code}->[0]->[2]);
+    }
+    ($reg, $format, $n, cgen->{code}->[0]->[2]);
 }
 
-sub cmd { $_[0]->{code}->[$_[1]]->[0] }
+sub cmd { $_[0]->{code}->[$_[1]]->[0]}
 
 sub clear { $_[0]->{code} = []; $_[0]->free_all_registers; }
 

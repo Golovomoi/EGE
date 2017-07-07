@@ -283,6 +283,7 @@ print STDERR "seed: @ss\n";
 #g1('Arch01', 'reg_value_shift');
 #g1('Arch01', 'reg_value_convert');
 #g1('Arch01', 'reg_value_jump');
+#g1('Arch01', 'reg_value_div');
 #g1('Arch02', 'flags_value_add');
 #g1('Arch02', 'flags_value_logic');
 #g1('Arch02', 'flags_value_shift');
@@ -339,6 +340,6 @@ print STDERR "seed: @ss\n";
 
 #push @$questions, EGE::Gen::Math::Summer::g($_) for qw(p1 p2 p3 p4 p5 p6 p7);
 
-print_html;
+#print_html;
 #print_json;
 #print_elt;
