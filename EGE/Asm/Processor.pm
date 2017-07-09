@@ -41,11 +41,6 @@ sub shift_commands() {
     { shl => 1, shr => 1, sal => 1, sar => 1, rol => 1, ror => 1, rcl => 1, rcr => 1 }
 }
 
-sub is_extended_result() {
-    { div => 1, mul => 1 };
-
-}
-
 
 sub get_register {
     my ($self, $reg) = @_;
@@ -65,48 +60,36 @@ sub get_wrong_val {
 }
 
 sub run_cmd {
-    my ($self, $cmd, $reg, $arg, $bits) = @_;
+    my ($self, $cmd, $reg, $arg, $extra_reg) = @_;
     $arg //= 'cl' if shift_commands->{$cmd};
     my $val = $self->is_stack_command($cmd) ? $self->{stack} : $self->get_val($arg);
     no strict 'refs';
-    if ($cmd =~ /^\w+?(?=_div)/) {$reg ? $self->get_register($reg)->$cmd($self->{eflags}, $reg, $val, $bits) : $self->$cmd; } 
-    else { $reg ? $self->get_register($reg)->$cmd($self->{eflags}, $reg, $val) : $self->$cmd;}
+    if ($cmd eq 'div') { $self->get_register($reg)->$cmd($self->{eflags}, $reg, $val, $extra_reg); }
+    else { $reg ? $self->get_register($reg)->$cmd($self->{eflags}, $reg, $val) : $self->$cmd; }
     $self;
 }
 
 sub label_regexp() { qr/^(\w+):$/ }
 
-sub splitting_act {
-    my ($self, $cmd, $com, $reg, $arg, $bits) = @_;
-    $cmd->[0] = $com;
-    $cmd->[1] = $reg;
-    $cmd->[2] = $arg;
-    $cmd->[3] = $bits if defined $bits;
-    $self->run_cmd(@$cmd);
-}
-sub extended_result {
+sub extend_args {
     my ($self, $cmd) = @_;
     my $reg = $cmd ->[1];
     if ($cmd->[0] eq 'div'){
         if ($reg =~ /^[a-d](l|h)/) {
-            $self->splitting_act($cmd, "mov", "al", "ax"); 
-            $self->splitting_act($cmd, "mov", "ah", "ax");
-            $self->splitting_act($cmd, "quotient_div", "al", $reg);
-            $self->splitting_act($cmd, "remainder_div", "ah", $reg);
+            $self->run_cmd('div', 'ax', $reg);
+            my $al = $self->get_val('al');
+            my $ah = $self->get_val('ah');
         }
         elsif ($reg =~ /^[a-d]x/) {
-            my $dx = $self->get_val('dx');
-            my $ax = $self->get_val('ax');
-            $self->splitting_act($cmd, "quotient_div", "ax", $reg, $dx);
-            $self->splitting_act($cmd, "remainder_div", "dx", $reg, $ax);
-        }   
-    }
-    else { 
-        if ($reg =~ /^[a-d](l|h)/) {
-            $self->splitting_act($cmd, "mov", "ax", "al"); 
-            $self->splitting_act($cmd, "mul", "ax", $reg);
+            my $ax = $self->get_register('ax');
+            $self->run_cmd('div', 'dx', $reg, $ax);
+            $some_v = $self->get_val('ax');
         }
-
+        else {
+            my $eax = $self->get_register('eax');
+            my $ebx_val = $self->get_val($reg);
+            $self->run_cmd('div', 'edx', $reg, $eax);
+        }   
     }
 
 }
@@ -122,9 +105,12 @@ sub run_code {
         elsif ($self->{eflags}->is_jump($op)) {
             $i = ($labels{$cmd->[1]} // die) - 1 if $self->{eflags}->valid_jump($op);
         }
+        elsif ($self->is_extended_result($op)) {
+            $self->extend_args($cmd);
+        }
         else {
-            is_extended_result->{$op} ? $self->extended_result($cmd) : $self->run_cmd(@$cmd);
-            }
+            $self->run_cmd(@$cmd);
+        }
     }
     $self;
 }
@@ -146,6 +132,12 @@ sub is_stack_command {
     my ($self, $cmd) = @_;
     { push => 1, pop => 1 }->{$cmd};
 }
+
+sub is_extended_result {
+    my ($self, $cmd) = @_;
+    { div => 1, mul => 1 }->{$cmd};
+}
+
 
 sub print_state {
     my $self = shift;

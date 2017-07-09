@@ -70,65 +70,69 @@ sub mov {
 }
 
 sub movzx {
-	my ($self, $eflags, $reg, $val) = @_;
-	$val = 2**(($self->{id_to} - $self->{id_from})/2) + $val if ($val < 0);
-	$self->mov($eflags, $reg, $val);
+    my ($self, $eflags, $reg, $val) = @_;
+    $val = 2**(($self->{id_to} - $self->{id_from})/2) + $val if ($val < 0);
+    $self->mov($eflags, $reg, $val);
 }
 
 sub movsx {
-	my ($self, $eflags, $reg, $val) = @_;
-	$val = 2**(($self->{id_to} - $self->{id_from})/2) + $val if ($val < 0);
-	$self->mov($eflags, $reg, $val);
-	my $mid = ($self->{id_from} + $self->{id_to}) / 2;
-	my $s = $self->{bits}->{v}[$mid];
-	$self->{bits}->{v}[$_] = $s for ($self->{id_from} .. $mid-1);
-	$self;
+    my ($self, $eflags, $reg, $val) = @_;
+    $val = 2**(($self->{id_to} - $self->{id_from})/2) + $val if ($val < 0);
+    $self->mov($eflags, $reg, $val);
+    my $mid = ($self->{id_from} + $self->{id_to}) / 2;
+    my $s = $self->{bits}->{v}[$mid];
+    $self->{bits}->{v}[$_] = $s for ($self->{id_from} .. $mid-1);
+    $self;
 }
 
 sub add {
-	my ($self, $eflags, $reg, $val, $cf) = @_;
-	$self->set_indexes($reg);
-	my $a = 2**($self->{id_to} - $self->{id_from});
-	$val = $a + $val if ($val < 0);
-	my $regs = $self->{bits}->{v}[$self->{id_from}];
-	my $vals = 0;
-	$vals = 1 if ($val >= $a/2);
-	my $newval = $self->get_value() + $val;
-	$newval++ if ($cf && $eflags->{CF});
-	$eflags->{CF} = 0;
-	$eflags->{CF} = 1, $newval %= $a if ($newval >= $a);
-	$self->mov($eflags, '', $newval);
-	$eflags->{OF} = 0;
-	my $ress = $self->{bits}->{v}[$self->{id_from}];
-	$eflags->{OF} = 1 if ($regs == $vals && $regs != $ress);
-	$self->set_ZSPF($eflags);
-	$self;
+    my ($self, $eflags, $reg, $val, $cf) = @_;
+    $self->set_indexes($reg);
+    my $a = 2**($self->{id_to} - $self->{id_from});
+    $val = $a + $val if ($val < 0);
+    my $regs = $self->{bits}->{v}[$self->{id_from}];
+    my $vals = 0;
+    $vals = 1 if ($val >= $a/2);
+    my $newval = $self->get_value() + $val;
+    $newval++ if ($cf && $eflags->{CF});
+    $eflags->{CF} = 0;
+    $eflags->{CF} = 1, $newval %= $a if ($newval >= $a);
+    $self->mov($eflags, '', $newval);
+    $eflags->{OF} = 0;
+    my $ress = $self->{bits}->{v}[$self->{id_from}];
+    $eflags->{OF} = 1 if ($regs == $vals && $regs != $ress);
+    $self->set_ZSPF($eflags);
+    $self;
 }
 
-sub quotient_div {
-	my ($self, $eflags, $reg, $val, $bits) = @_;
-	my $dividend = $self->get_value($reg);
-	$dividend += $bits*2**16 if defined $bits;
-	my $divisor = $val;
-	my $newval = int($dividend / $divisor);
-	$self->mov($eflags, '', $newval);
-	$self;
+sub div {
+    my ($self, $eflags, $reg, $divisor, $extra_reg) = @_;
+    if (not defined $extra_reg) {
+        my $dividend = $self->get_value;
+        my $quotient = int ($dividend / $divisor);
+        my $remainder = $dividend % $divisor;
+        $self->mov($eflags, 'al', $quotient);
+        $self->mov($eflags, 'ah', $remainder);
+        die '#DE quotient is too big' if ($quotient >= 2**8);  
+    }
+    else {
+        my $high_bits = $self->get_value;
+        my $low_bits = $extra_reg->get_value;
+        my $reg_size = $extra_reg->{id_to} - $extra_reg->{id_from};
+        my $dividend = $high_bits*2**($extra_reg->{id_to} - $extra_reg->{id_from}) + $low_bits;
+        my $quotient = int ($dividend / $divisor);
+        my $remainder = $dividend % $divisor;
+        $self->mov($eflags, '', $remainder);
+        $extra_reg->mov($eflags, '', $quotient);
+        die '#DE quotient is too big' if ($quotient >= 2**$reg_size);
+        
+    }
+    
 }
-
-sub remainder_div {
-	my ($self, $eflags, $reg, $val, $bits) = @_;
-	my $dividend = $self->get_value($reg);
-	$dividend = $dividend*2**16 +$bits if defined $bits;
-	my $divisor = $val;
-	my $newval = $dividend % $divisor;
-	$self->mov($eflags, '', $newval);
-	$self;
-}
-
 
 sub adc {
-	my ($self, $eflags, $reg, $val) = @_;
-	$self->add($eflags, $reg, $val, 1);
+    my ($self, $eflags, $reg, $val) = @_;
+    $self->add($eflags, $reg, $val, 1);
 }
 
 sub sub {
@@ -148,8 +152,8 @@ sub sub {
 }
 
 sub sbb {
-	my ($self, $eflags, $reg, $val) = @_;
-	$self->sub($eflags, $reg, $val, 1);
+    my ($self, $eflags, $reg, $val) = @_;
+    $self->sub($eflags, $reg, $val, 1);
 }
 
 sub cmp {
@@ -160,11 +164,11 @@ sub cmp {
 }
 
 sub neg {
-	my ($self, $eflags, $reg) = @_;
-	my $val = $self->get_value($reg);
-	$self->mov($eflags, '', 0);
-	$self->sub($eflags, '', $val);
-	$self;
+    my ($self, $eflags, $reg) = @_;
+    my $val = $self->get_value($reg);
+    $self->mov($eflags, '', 0);
+    $self->sub($eflags, '', $val);
+    $self;
 }
 
 # TODO: Это заглушка только для использования в Arch13.
@@ -175,51 +179,51 @@ sub imul {
 }
 
 sub and {
-	my ($self, $eflags, $reg, $val) = @_;
-	$self->set_indexes($reg) if ($reg);
-	$val = 2**($self->{id_to} - $self->{id_from}) + $val if ($val < 0);
-	$self->{bits}->logic_op('and', $val, $self->{id_from}, $self->{id_to});
-	$self->set_ZSPF($eflags);
-	$eflags->{OF} = 0;
-	$eflags->{CF} = 0;
-	$self;
+    my ($self, $eflags, $reg, $val) = @_;
+    $self->set_indexes($reg) if ($reg);
+    $val = 2**($self->{id_to} - $self->{id_from}) + $val if ($val < 0);
+    $self->{bits}->logic_op('and', $val, $self->{id_from}, $self->{id_to});
+    $self->set_ZSPF($eflags);
+    $eflags->{OF} = 0;
+    $eflags->{CF} = 0;
+    $self;
 }
 
 sub or {
-	my ($self, $eflags, $reg, $val) = @_;
-	$self->set_indexes($reg);
-	$val = 2**($self->{id_to} - $self->{id_from}) + $val if ($val < 0);
-	$self->{bits}->logic_op('or', $val, $self->{id_from}, $self->{id_to});
-	$self->set_ZSPF($eflags);
-	$eflags->{OF} = 0;
-	$eflags->{CF} = 0;
-	$self;
+    my ($self, $eflags, $reg, $val) = @_;
+    $self->set_indexes($reg);
+    $val = 2**($self->{id_to} - $self->{id_from}) + $val if ($val < 0);
+    $self->{bits}->logic_op('or', $val, $self->{id_from}, $self->{id_to});
+    $self->set_ZSPF($eflags);
+    $eflags->{OF} = 0;
+    $eflags->{CF} = 0;
+    $self;
 }
 
 sub xor {
-	my ($self, $eflags, $reg, $val) = @_;
-	$self->set_indexes($reg);
-	$val = 2**($self->{id_to} - $self->{id_from}) + $val if ($val < 0);
-	$self->{bits}->logic_op('xor', $val, $self->{id_from}, $self->{id_to});
-	$self->set_ZSPF($eflags);
-	$eflags->{OF} = 0;
-	$eflags->{CF} = 0;
-	$self;
+    my ($self, $eflags, $reg, $val) = @_;
+    $self->set_indexes($reg);
+    $val = 2**($self->{id_to} - $self->{id_from}) + $val if ($val < 0);
+    $self->{bits}->logic_op('xor', $val, $self->{id_from}, $self->{id_to});
+    $self->set_ZSPF($eflags);
+    $eflags->{OF} = 0;
+    $eflags->{CF} = 0;
+    $self;
 }
 
 sub test {
-	my ($self, $eflags, $reg, $val) = @_;
-	my $oldval = $self->get_value($reg);
-	$self->and($eflags, '', $val);
-	$self->mov($eflags, '', $oldval);
-	$self;
+    my ($self, $eflags, $reg, $val) = @_;
+    my $oldval = $self->get_value($reg);
+    $self->and($eflags, '', $val);
+    $self->mov($eflags, '', $oldval);
+    $self;
 }
 
 sub not {
-	my ($self, $eflags, $reg) = @_;
-	$self->set_indexes($reg);
-	$self->{bits}->logic_op('not', '', $self->{id_from}, $self->{id_to});
-	$self;
+    my ($self, $eflags, $reg) = @_;
+    $self->set_indexes($reg);
+    $self->{bits}->logic_op('not', '', $self->{id_from}, $self->{id_to});
+    $self;
 }
 
 sub shl {
@@ -264,65 +268,65 @@ sub sar {
 }
 
 sub rol {
-	my ($self, $eflags, $reg, $val) = @_;
-	$self->rotate_shift($eflags, $reg, $val, sub {
-		$self->shl($eflags, '', 1);
-		$self->{bits}->{v}[$self->{id_to} - 1] = $eflags->{CF};
-	});
-	$self;
+    my ($self, $eflags, $reg, $val) = @_;
+    $self->rotate_shift($eflags, $reg, $val, sub {
+        $self->shl($eflags, '', 1);
+        $self->{bits}->{v}[$self->{id_to} - 1] = $eflags->{CF};
+    });
+    $self;
 }
 
 sub rcl {
-	my ($self, $eflags, $reg, $val) = @_;
-	$self->rotate_shift($eflags, $reg, $val, sub {
-		my $prevc = $eflags->{CF};
-		$self->shl($eflags, '', 1);
-		$self->{bits}->{v}[$self->{id_to} - 1] = $prevc;
-	});
-	$self;
+    my ($self, $eflags, $reg, $val) = @_;
+    $self->rotate_shift($eflags, $reg, $val, sub {
+        my $prevc = $eflags->{CF};
+        $self->shl($eflags, '', 1);
+        $self->{bits}->{v}[$self->{id_to} - 1] = $prevc;
+    });
+    $self;
 }
 
 sub ror {
-	my ($self, $eflags, $reg, $val) = @_;
-	$self->rotate_shift($eflags, $reg, $val, sub {
-		$self->shr($eflags, '', 1);
-		$self->{bits}->{v}[$self->{id_from}] = $eflags->{CF};
-	});
-	$self;
+    my ($self, $eflags, $reg, $val) = @_;
+    $self->rotate_shift($eflags, $reg, $val, sub {
+        $self->shr($eflags, '', 1);
+        $self->{bits}->{v}[$self->{id_from}] = $eflags->{CF};
+    });
+    $self;
 }
 
 sub rcr {
-	my ($self, $eflags, $reg, $val) = @_;
-	$self->rotate_shift($eflags, $reg, $val, sub {
-		my $prevc = $eflags->{CF};
-		$self->shr($eflags, '', 1);
-		$self->{bits}->{v}[$self->{id_from}] = $prevc;
-	});
-	$self;
+    my ($self, $eflags, $reg, $val) = @_;
+    $self->rotate_shift($eflags, $reg, $val, sub {
+        my $prevc = $eflags->{CF};
+        $self->shr($eflags, '', 1);
+        $self->{bits}->{v}[$self->{id_from}] = $prevc;
+    });
+    $self;
 }
 
 sub rotate_shift {
-	my ($self, $eflags, $reg, $val, $sub) = @_;
-	$self->set_indexes($reg);
-	$val %= $self->{id_to} - $self->{id_from};
-	for (1..$val) {
-		$sub->();
-	}
-	$self->set_ZSPF($eflags);
-	$eflags->{OF} = 0;
-	$self;
+    my ($self, $eflags, $reg, $val, $sub) = @_;
+    $self->set_indexes($reg);
+    $val %= $self->{id_to} - $self->{id_from};
+    for (1..$val) {
+        $sub->();
+    }
+    $self->set_ZSPF($eflags);
+    $eflags->{OF} = 0;
+    $self;
 }
 
 sub push {
-	my ($self, $eflags, $reg, $stack) = @_;
-	unshift @{$stack}, $self->get_value($reg);
-	$self;
+    my ($self, $eflags, $reg, $stack) = @_;
+    unshift @{$stack}, $self->get_value($reg);
+    $self;
 }
 
 sub pop {
-	my ($self, $eflags, $reg, $stack) = @_;
-	$self->mov($eflags, $reg, shift @{$stack});
-	$self;
+    my ($self, $eflags, $reg, $stack) = @_;
+    $self->mov($eflags, $reg, shift @{$stack});
+    $self;
 }
 
 sub _bs {
