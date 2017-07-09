@@ -83,7 +83,6 @@ sub extend_args {
         elsif ($reg =~ /^[a-d]x/) {
             my $ax = $self->get_register('ax');
             $self->run_cmd('div', 'dx', $reg, $ax);
-            $some_v = $self->get_val('ax');
         }
         else {
             my $eax = $self->get_register('eax');

@@ -125,8 +125,7 @@ sub reg_value_div {
     my $self = shift;
     my ($reg, $format, $n) = cgen->generate_div_code('div');
     my @variants = $self->get_res($reg, $format);
-    push @variants, offs_modulo($variants[0], 2 ** $n, rnd->pick(2, -2), 1, - 1)
-        if $n == 8 || cgen->cmd(1) =~ /^(stc|clc)$/;
+    push @variants, offs_modulo($variants[0], 2 ** $n, rnd->pick(2, -2), 1, - 1);
     $self->formated_variants($format, @variants, make_wrongs($reg, 4, @variants));
 }
 

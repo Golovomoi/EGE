@@ -186,7 +186,7 @@ sub generate_bscan_code {
 
 sub generate_div_code {
     my ($self, $type) =@_;
-    my $size = rnd->pick(8,  16);
+    my $size = rnd->pick(8, 16, 32);
     my ($format) = {8 => '%s', 16=> ('%04Xh'), 32 => ('%08Xh')}->{$size};
     $self->{code} = [];
     my $reg;
@@ -199,13 +199,21 @@ sub generate_div_code {
             $reg = rnd->pick('al', 'ah');  
         }
     else {
-        $reg = rnd->pick('bx', 'cx');
+        my $div_reg = rnd->pick('bx', 'cx');
+        my ($h_bits, $l_bits) = ('ax', 'dx');
+        if ($size == 32){
+            $h_bits = 'e' . $h_bits;
+            $l_bits = 'e' . $l_bits;
+        }
         $self->add_commands(
-            $self->random_mov('dx'),
-            $self->random_mov('ax'),
-            $self->random_mov("$reg"),
-            ['div', $reg ]);    
+            $self->random_mov($h_bits),
+            $self->random_mov($l_bits),
+            ['mov', $div_reg, rnd->in_range(2**9, 2**$size - 1)],
+            ['div', $div_reg ]);    
         $reg = rnd->pick('ax', 'dx');
+        if ($size == 32){
+            $reg = "e" . $reg;
+        }
         }
     ($reg, $format, $size);
 }
